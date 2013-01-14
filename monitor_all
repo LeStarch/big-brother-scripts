@@ -1,0 +1,71 @@
+#!/bin/bash
+
+checkurl()
+{
+  curl=`curl -f -s -I http://$1 2> /dev/null`
+  retval=$?
+  while [ $retval -ne 0 ]; do
+    curl=`curl -f -s -I http://$1 2> /dev/null`
+    retval=$?
+    echo "in loop"
+  done
+}
+
+playvideo()
+{
+  if [ ! -d log ] ; then
+    mkdir log
+  fi
+  while [ true ] ; do
+    checkurl $1
+    /usr/bin/vlc http://$1 --video-title "$3" --aout jack 2>> log/$1.err > log/$1.log &
+    RETVAL=$?
+    pid=$!
+    if [ $RETVAL ] ; then
+#      echo $pid
+      dev=`jack_lsp | grep $pid`
+      while [ "$dev" == "" ] ; do
+        dev=`jack_lsp | grep $pid`
+      done
+      for d in $dev ; do
+        jack_connect $d "Meters:meter_$2"
+      done
+      running=1
+      while [ $running -gt 0 ] ; do
+        sleep 1
+        running=`pgrep vlc | grep $pid | wc -l`
+	if [ $running -gt 0 ] ; then
+	  running=`jack_lsp vlc_${pid}: | wc -l`
+	fi
+      done
+      kill $pid
+    fi
+  done
+}
+
+
+
+running=`jack_lsp 2> /dev/null`
+retval=$?
+if [ $retval -eq 1 ] ; then
+  echo "Jack not Running, or not correct User."
+  exit
+fi
+echo "Moving on."
+
+/home/all/i3-ipc -s /tmp/i3-$(whoami)/ipc-socket.$(ps aux | grep "i3$" | awk '{ print $2}') "split v"
+playvideo laa 1 "Los Angeles A" &
+playvideo lab 2 "Los Angeles B" &
+playvideo lac 3 "Los Angeles C" &
+playvideo lajolla 4 "La Jolla" &
+playvideo belair 5 "Bel Air" &
+playvideo carmel 6 "Carmel" &
+playvideo centurya 7 "Century A" &
+playvideo centuryb 8 "Century B" &
+playvideo centuryc 9 "Century C" &
+playvideo centuryd 10 "Century D" &
+playvideo marina 11 "Marina" &
+
+
+
+

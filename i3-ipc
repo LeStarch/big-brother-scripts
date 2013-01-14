@@ -1,0 +1,433 @@
+#!/usr/bin/env ruby
+#
+# This file, i3-ipc, is generated code.
+# Please DO NOT EDIT or send patches for it.
+#
+# Please take a look at the source from
+# http://github.com/badboy/i3-ipc
+# and submit patches against the individual files
+# that build i3-ipc.
+#
+require 'rubygems'
+require 'eventmachine'
+
+module I3
+  module Subscription
+    extend self
+
+    class SubscriptionConnection < EM::Connection
+      def self.connect(subscription_list, socket_path=I3::IPC::SOCKET_PATH, &blk)
+        new_klass = Class.new(self)
+        new_klass.send(:define_method, :initialize) do
+          @subscription_list = subscription_list
+          @handler = blk
+        end
+        EM.connect socket_path, new_klass
+      end
+
+      def post_init
+        send_data I3::IPC.format(I3::IPC::MESSAGE_TYPE_SUBSCRIBE,
+                                 @subscription_list.to_json)
+      end
+
+      def receive_data(data)
+        @handler.call(self, *I3::IPC.parse_response(data)) if @handler
+      end
+    end
+
+    def subscribe(subscription_list, socket_path=I3::IPC::SOCKET_PATH, &blk)
+      EM.run do
+        SubscriptionConnection.connect(subscription_list,
+                                       socket_path, &blk)
+      end
+    end
+  end
+end
+module I3
+  module Manpage
+    extend self
+
+    def display(name)
+      puts manpage(name)
+    end
+
+    def manpage(name)
+      return "** Can't find groff(1)" unless groff?
+
+      require 'open3'
+      out = nil
+      Open3.popen3(groff_command) do |stdin, stdout, _|
+        stdin.puts raw_manpage(name)
+        stdin.close
+        out = stdout.read.strip
+      end
+      out
+    end
+
+    def raw_manpage(name)
+      if File.exists? file = File.dirname(__FILE__) + "/../../man/#{name}.1"
+        File.read(file)
+      else
+        DATA.read
+      end
+    end
+
+    def groff?
+      system("which groff > /dev/null")
+    end
+
+    def groff_command
+      "groff -Wall -mtty-char -mandoc -Tascii"
+    end
+
+    def puts(*args)
+      page_stdout
+      super
+    end
+
+    def page_stdout
+      return unless $stdout.tty?
+
+      read, write = IO.pipe
+
+      if Kernel.fork
+        $stdin.reopen(read)
+        read.close
+        write.close
+
+        ENV['LESS'] = 'FSRX'
+
+        Kernel.select [STDIN]
+
+        pager = ENV['PAGER'] || 'less -isr'
+        pager = 'cat' if pager.empty?
+
+        exec pager rescue exec "/bin/sh", "-c", pager
+      else
+        $stdout.reopen(write)
+        $stderr.reopen(write) if $stderr.tty?
+        read.close
+        write.close
+      end
+    end
+  end
+end
+module I3
+  Version = '0.1.4'
+end
+require 'optparse'
+require 'pp'
+
+module I3
+  module Runner
+    extend self
+    OUTPUT = $stdout
+
+    def format_output(object, output)
+      if output == :pretty_print
+        PP.pp(object, OUTPUT)
+      elsif output == :json
+        require 'json'
+        OUTPUT.puts object.to_json
+      else
+        OUTPUT.puts object.inspect
+      end
+    end
+
+    def subscribe(path, output)
+      trap('SIGINT') { EM.stop; puts }
+      I3::IPC.subscribe([:workspace], path) do |em, type, data|
+        case type
+        when I3::IPC::MESSAGE_REPLY_GET_WORKSPACES
+          format_output data, output
+        when I3::IPC::EVENT_WORKSPACE
+          em.send_data I3::IPC.format(I3::IPC::MESSAGE_TYPE_GET_WORKSPACES)
+        end
+      end
+    end
+
+    def execute(*args)
+      socket_file = File.expand_path('~/.i3/ipc.sock')
+      type = 0
+      quiet = false
+      output = :default
+
+      opts = OptionParser.new do |opts|
+        opts.banner = "Usage: i3-ipc [options] [message]"
+
+        s_desc = 'Set socket file, defaults to ~/.i3/ipc.sock'
+        opts.on('-s SOCKET', '--socket SOCKET', s_desc) do |s|
+          socket_file = File.expand_path(s)
+        end
+
+        t_desc = 'Set type, 0 = command, 1 = workspace list, 2 = subscribe to workspace event, 3 = output list, default: 0'
+        opts.on('-tTYPE', '--type TYPE', Integer, t_desc) do |t|
+          type = t
+        end
+
+        opts.on('-p', '--pretty-print', 'Pretty print reply') do |p|
+          output = :pretty_print
+        end
+
+        opts.on('-j', '--json', 'Output raw json') do |p|
+          output = :json
+        end
+
+        opts.on('-q', '--quiet', %(Don't show reply)) do |q|
+          quiet = q
+        end
+
+        opts.on('-m', '--man', 'Print manual') do
+          I3::Manpage.display("i3-ipc")
+        end
+
+        opts.on('-h', '--help', 'Display this screen') do
+          OUTPUT.puts opts
+          exit
+        end
+      end
+
+      opts.parse!(args)
+
+      s = I3::IPC.new(socket_file)
+
+      case type
+      when 0
+        if args.empty?
+          abort "error: message type needs a message"
+        end
+
+        payload = args.shift
+        OUTPUT.puts s.command(payload).inspect unless quiet
+      when I3::IPC::MESSAGE_TYPE_GET_WORKSPACES
+        format_output s.get_workspaces, output
+      when I3::IPC::MESSAGE_REPLY_SUBSCRIBE
+        subscribe socket_file, output
+      when I3::IPC::MESSAGE_TYPE_GET_OUTPUTS
+        format_output s.get_outputs, output
+      when 4
+        format_output s.get_tree, output
+      when 5
+        format_output s.get_tree, output
+      when 6
+        format_output s.get_tree, output
+      else
+        abort "error: type #{type} not yet implemented"
+      end
+    end
+  end
+end
+require 'socket'
+require 'json'
+
+module I3
+  class IPC
+    MAGIC_STRING = "i3-ipc"
+    SOCKET_PATH = File.expand_path("~/.i3/ipc.sock")
+
+    MESSAGE_TYPE_COMMAND = 0
+    MESSAGE_TYPE_GET_WORKSPACES = 1
+    MESSAGE_TYPE_SUBSCRIBE = 2
+    MESSAGE_TYPE_GET_OUTPUTS = 3
+
+    MESSAGE_REPLY_COMMAND = 0
+    MESSAGE_REPLY_GET_WORKSPACES = 1
+    MESSAGE_REPLY_SUBSCRIBE = 2
+    MESSAGE_REPLY_GET_OUTPUTS = 3
+
+    EVENT_MASK = (1 << 31)
+    EVENT_WORKSPACE = (EVENT_MASK | 0)
+
+    class WrongMagicCode < RuntimeError; end # :nodoc:
+    class WrongType < RuntimeError; end # :nodoc:
+
+    def initialize(socket_path=SOCKET_PATH, force_connect=false)
+      @socket_path = socket_path
+      connect if connect
+    end
+
+    def self.subscribe(list, socket_path=SOCKET_PATH, &blk)
+      Subscription.subscribe(list, socket_path, &blk)
+    end
+
+    def command(payload)
+      write format(MESSAGE_TYPE_COMMAND, payload)
+      handle_response MESSAGE_TYPE_COMMAND
+    end
+
+    def get_workspaces
+      write format(MESSAGE_TYPE_GET_WORKSPACES)
+      handle_response MESSAGE_TYPE_GET_WORKSPACES
+    end
+
+    def get_outputs
+      write format(MESSAGE_TYPE_GET_OUTPUTS)
+      handle_response MESSAGE_TYPE_GET_OUTPUTS
+    end
+
+    def get_tree
+      write format(4)
+      handle_response 4
+    end
+
+    def handle_response(type)
+      buffer = read 14
+      raise WrongMagicCode unless buffer[0, (MAGIC_STRING.length)] == MAGIC_STRING
+
+      len, recv_type = buffer[6..-1].unpack("LL")
+      raise WrongType unless recv_type == type
+
+      answer = read len
+      ::JSON.parse(answer)
+    end
+
+    def self.format(type, payload=nil)
+      size = payload ? payload.to_s.bytes.count : 0
+      msg = MAGIC_STRING + [size, type].pack("LL")
+      msg << payload.to_s if payload
+      msg
+    end
+
+    def format(type, payload=nil)
+      self.class.format(type, payload)
+    end
+
+    def self.parse_response(response)
+      if response[0, (MAGIC_STRING.length)] != MAGIC_STRING
+        raise WrongMagicCode
+      end
+
+      len, recv_type = response[6, 8].unpack("LL")
+
+      answer = response[14, len]
+      [recv_type, ::JSON.parse(answer)]
+    end
+
+    def parse_response(response)
+      self.class.parse_response(response)
+    end
+
+    def write(msg)
+      connect if @socket.nil? || closed?
+      @last_write_length = @socket.write msg
+    end
+
+    def read(len)
+      @socket.read(len)
+    end
+
+    def connect
+      @socket = UNIXSocket.new(@socket_path)
+    end
+
+    def close
+      @socket.close
+    end
+
+    def closed?
+      @socket.closed?
+    end
+  end
+end
+
+I3::Runner.execute(*ARGV)
+__END__
+.\" generated with Ronn/v0.5
+.\" http://github.com/rtomayko/ronn/
+.
+.TH "I3\-IPC" "1" "April 2010" "badboy" "i3-ipc Manual"
+.
+.SH "NAME"
+\fBi3\-ipc\fR \-\- inter\-process communication with i3
+.
+.SH "SYNOPSIS"
+\fBi3\-ipc\fR [\fB\-s\fR] [\fB\-t type\fR] [\fB\-p\fR] [\fB\-j\fR] [\fB\-q\fR] [\fBmessage\fR]
+.
+.SH "DESCRIPTION"
+\fBi3\-ipc\fR can be used to communicate with i3, the improved tiling window manager, through the provided ipc socket. Useful for scripting the window manager.
+.
+.P
+Currently implemented message types of i3 are the following:
+.
+.TP
+\fB0 (COMMAND)\fR
+  The payload of the message is a command for i3
+  (like the commands you can bind to keys in the configuration file)
+  The command will be executed directly after receiving it.
+  The reply will be always {"succes":true} for now.
+.
+.TP
+\fB1 (GET_WORKSPACES)\fR
+  Gets the current workspaces.
+  The reply will be a JSON\-encoded list of workspaces.
+.
+.TP
+\fB2 (SUBSCRIBE)\fR
+  Subscribes your connection to the \fBworkspace\fR event.
+.
+.TP
+\fB3 (GET_OUTPUTS)\fR
+  Gets the current outputs.
+  The reply will be a JSON\-encoded list of outputs.
+.
+.SH "OPTIONS"
+\fBi3\-ipc\fR's default mode of operation is to send the command (type 0) specified on the command line.
+.
+.P
+These options can be used to change this behavior:
+.
+.TP
+\fB\-s\fR, \fB\-\-socket\fR
+Set the socket file, defaults to ~/.i3/ipc.sock
+.
+.TP
+\fB\-t\fR, \fB\-\-type\fR
+Set the type. Passing a type of 0 is the default and will send the specified command, type 1 gets the current workspace list,
+type 2 subscribes to the workspace stream, type 3 gets the current output list.
+.
+.TP
+\fB\-p\fR, \fB\-\-pretty\-print\fR
+This will pretty print the received reply. Useful for the workspace list.
+.
+.TP
+\fB\-j\fR, \fB\-\-json\fR
+This will print the received reply as raw json\-encoded data. Useful to pass to another script.
+.
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Turn off the output. Useful for command mode.
+.
+.TP
+\fBmessage\fR
+This is the actual command to send as defined by i3
+.
+.P
+You may additionally ask for help:
+.
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help.
+.
+.TP
+\fB\-m\fR, \fB\-\-man\fR
+Display this man page.
+.
+.SH "EXAMPLES"
+.
+.nf
+
+$ i3\-ipc \-t 1
+$ i3\-ipc \-t 2 \-p
+$ i3\-ipc \-t 3 \-j
+$ i3\-ipc "exec xterm"
+.
+.fi
+.
+.SH "BUGS"
+\fIhttp://github.com/badboy/i3\-ipc/issues\fR
+.
+.SH "AUTHOR"
+Jan\-Erik Rediger:: badboy@archlinux.us
+.
+.SH "SEE ALSO"
+i3(1), i3\-msg(1), \fIhttp://i3.zekjur.net/\fR, \fIhttp://github.com/badboy/i3\-ipc\fR
