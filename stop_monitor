@@ -1,0 +1,19 @@
+#!/bin/bash
+
+set -xv
+
+echo "Shutting down previously running agents"
+pkill -9 -f monitor_all
+pkill -9 -f pulseaudio
+pkill -9 -f jackd
+pkill -9 -f jack_lsp
+pkill -9 -f vlc
+pkill -9 -f meterbridge
+pkill -9 -f follow-sound
+
+# Kill all start_monitor jobs other than one that is our parent
+PIDS=`pgrep start_monitor| grep -v $PPID`
+if [ -n "$PIDS" ] ; then kill $PIDS ; fi
+
+sleep 3
+

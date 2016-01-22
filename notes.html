@@ -1,0 +1,81 @@
+To create a new monitor station
+
+<ol>
+<li>Install Fedora<p>
+Other distros may work but Fedora has support for the newest hardware drivers and has been the easiest solution.  Keep the stations consistent.
+<ul>
+<li>Set the root password to the standard
+<li>Create an admin user 'monitor' as fullname 'Scale AV team'
+</ul></li>
+
+<li>Set up the host
+<ol>
+<li>Turn on the SSHD server
+<pre>
+sudo systemctl enable sshd.service
+sudo systemctl start sshd.service
+</pre></li>
+<li>Set up the desktop
+<ol>
+<li>Arrange the monitors:
+<li>Right click on the screen background and choose 'settings'
+<li>Select 'Displays'
+<li>Click on 'Arrange Combined Displays'
+<li>Click on 'Apply'
+<li>Click on 'Accept changes'
+<li>Click the back arrow in the upper left
+<li>Select 'Power'
+<li>Change the 'blank screen' time to 15 minutes
+<li>Set the hostname
+<pre>
+sudo vi /etc/hostname
+</pre>
+monitor&lt;number&gt;.scaleav.us
+</li>
+<li>Reboot to pick up the new hostname
+</ol></li>
+
+<li>Set up access
+<ol>
+<li>Create a ssh key
+<pre>
+ssh-keygen
+</pre></li>
+<li>Copy the .ssh/id_rsa.pub onto the end of all other station .ssh/authorized_keys files.
+<li>Copy those workstation's id_rsa.pubs onto the end of ~monitor/.ssh/authorized_keys.
+</ol></li>
+
+<li>Set up name resolution
+<ol>
+<li>Edit the hosts file
+<pre>
+sudo vi /etc/hosts
+</pre></li>
+<li>Get our ip address
+<pre>
+ip addr
+</pre></li>
+<li>Add our IP address to all the other stations' hosts files.
+</ol></li>
+
+<li>Copy in the software
+<pre>
+cd
+git clone https://github.com/socallinuxexpo/av-video_monitor.git scaleav
+git clone https://github.com/socallinuxexpo/follow-sound.git scaleav/src/follow_sound
+</pre></li>
+
+<li>Install pre-requisite software and set up configuration files
+<pre>
+cd ~/scaleav
+./setup_monitor
+</pre></li>
+
+<li>Launch the video monitoring suite
+<pre>
+cd ~/scaleav
+./start_monitor
+</pre>
+
+</ol>
+
