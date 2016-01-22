@@ -122,7 +122,7 @@ CHAN2=$ROOMCOUNT
 /usr/bin/jack_connect Meters:monitor_$CHAN1 system:playback_1 >> $LOGSDIR/setup_audio.stdout 2>> $LOGSDIR/setup_audio.stderr
 /usr/bin/jack_connect Meters:monitor_$CHAN2 system:playback_2 >> $LOGSDIR/setup_audio.stdout 2>> $LOGSDIR/setup_audio.stderr
 
-follow-sound >> $LOGSDIR/follow-sound.stdout 2>> $LOGSDIR/follow-sound.stderr &
+bin/follow-sound >> $LOGSDIR/follow-sound.stdout 2>> $LOGSDIR/follow-sound.stderr &
 
 echo "Starting the video monitors"
 jack_lsp 2> /dev/null
