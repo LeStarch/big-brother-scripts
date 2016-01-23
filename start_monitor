@@ -36,11 +36,8 @@ playvideo()
     mkdir log
   fi
   while [ true ] ; do
-    #checkurl $1
-    #/usr/bin/vlc http://$1 --video-title "$3" --aout jack 2>> log/$1.err > log/$1.log &
-    #/usr/bin/vlc rtsp://$1-cam:554/profile5/media.smp --video-title "$3" --aout jack 2>> log/$1.err > log/$1.log &
-    #/usr/bin/mplayer -really-quiet -nomouseinput -noconsolecontrols -nojoystick -nolirc -ao jack http://$1.scaleav.us:8080/mixed 2>&1 > log/$1.err &
-    /usr/bin/vlc --audio-track=1 --vout xvideo http://$1.scaleav.us:8080/mixed --video-title "$3" --aout jack 2>> log/$1.err > log/$1.log &
+    # /usr/bin/vlc --audio-track=1 --vout xvideo http://$1.scaleav.us:8080/mixed --video-title "$3" --aout jack 2>> log/$1.err > log/$1.log &
+    /usr/bin/vlc --audio-track=1 --vout vdpau_display http://$1.scaleav.us:8080/mixed --video-title "$3" --aout jack 2>> log/$1.err > log/$1.log &
     sleep 2
     RETVAL=$?
     pid=$!
@@ -62,12 +59,12 @@ playvideo()
           jack_disconnect "$d" system:playback_2
         done
         sleep 1
-	running=`jack_lsp vlc_${pid}: | wc -l`
+        running=`jack_lsp vlc_${pid}: | wc -l`
         #running=`jack_lsp "MPlayer [${pid}]:" | wc -l`
         #running=`pgrep vlc | grep $pid | wc -l`
-	#if [ $running -gt 0 ] ; then
-	#  running=`jack_lsp vlc_${pid}: | wc -l`
-	#fi
+        #if [ $running -gt 0 ] ; then
+        #  running=`jack_lsp vlc_${pid}: | wc -l`
+        #fi
       done
       kill $pid
     fi
@@ -75,12 +72,14 @@ playvideo()
 }
 
 monitor_all() {
-    i3-ipc -s /tmp/i3-$(whoami)/ipc-socket.$(ps aux | grep "i3$" | awk '{ print $2}') "split v"
+    ./i3-ipc -s /tmp/i3-$(whoami)/ipc-socket.$(ps aux | grep "i3$" | awk '{ print $2}') "split v"
 
     win_num=1
     for room in $(cat roomlist); do
         playvideo $room $win_num $room &
         win_num=$(expr $win_num + 1)
+#TODO: remove when xvideo functionality is restored
+sleep 5
     done
 }
 
@@ -132,4 +131,32 @@ if [ $retval -eq 1 ] ; then
   exit
 fi
 monitor_all >> $LOGSDIR/monitor_all.stdout 2>> $LOGSDIR/monitor_all.stderr
+
+# Auto position the windows starting in the upper left of the combined monitors
+DISPLAYHEIGHT=`xrandr | head -1  | sed -e 's/, max.*//' -e 's/.* //'`
+WINHEIGHT=`expr $DISPLAYHEIGHT / 3`		# Display windows three-up
+WINWIDTH=`expr $WINHEIGHT \* 4 / 3`
+DISPLAYBOT=`expr $DISPLAYHEIGHT - $WINHEIGHT`
+WINDOWS=`xdotool search --name http`
+while [ -z "$WINDOWS" ] ; do
+    WINDOWS=`xdotool search --name http`
+    sleep 2
+done
+X=0
+Y=0
+sleep 10
+for WINDOW in $WINDOWS ; do
+    xdotool windowsize $WINDOW $WINWIDTH $WINHEIGHT
+    sleep 2
+    xdotool windowmove $WINDOW $X $Y
+    sleep 2
+    Y=`expr $Y + $WINHEIGHT`
+    if [ $Y -gt $DISPLAYBOT ] ; then
+        Y=0
+        X=`expr $X + $WINWIDTH`
+    fi
+done
+# Position the audio mixer
+WINDOW=`xdotool search --name Meters`
+xdotool windowmove $WINDOW $X $Y
 
