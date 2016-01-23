@@ -36,8 +36,8 @@ playvideo()
     mkdir log
   fi
   while [ true ] ; do
-    # /usr/bin/vlc --audio-track=1 --vout xvideo http://$1.scaleav.us:8080/mixed --video-title "$3" --aout jack 2>> log/$1.err > log/$1.log &
-    /usr/bin/vlc --audio-track=1 --vout vdpau_display http://$1.scaleav.us:8080/mixed --video-title "$3" --aout jack 2>> log/$1.err > log/$1.log &
+    # /usr/bin/vlc --no-osd --qt-minimal-view --audio-track=1 --vout xvideo http://$1.scaleav.us:8080/mixed --video-title "$3" --aout jack 2>> log/$1.err > log/$1.log &
+    /usr/bin/vlc --no-osd --qt-minimal-view --audio-track=1 --vout opengl http://$1.scaleav.us:8080/mixed --video-title "$3" --aout jack 2>> log/$1.err > log/$1.log &
     sleep 2
     RETVAL=$?
     pid=$!
@@ -79,7 +79,7 @@ monitor_all() {
         playvideo $room $win_num $room &
         win_num=$(expr $win_num + 1)
 #TODO: remove when xvideo functionality is restored
-sleep 5
+sleep 10
     done
 }
 
@@ -134,7 +134,8 @@ monitor_all >> $LOGSDIR/monitor_all.stdout 2>> $LOGSDIR/monitor_all.stderr
 
 # Auto position the windows starting in the upper left of the combined monitors
 DISPLAYHEIGHT=`xrandr | head -1  | sed -e 's/, max.*//' -e 's/.* //'`
-WINHEIGHT=`expr $DISPLAYHEIGHT / 3`		# Display windows three-up
+TITLEHEIGHT=40
+WINHEIGHT=`expr $DISPLAYHEIGHT / 3` # Display windows three-up
 WINWIDTH=`expr $WINHEIGHT \* 4 / 3`
 DISPLAYBOT=`expr $DISPLAYHEIGHT - $WINHEIGHT`
 WINDOWS=`xdotool search --name http`
@@ -142,11 +143,12 @@ while [ -z "$WINDOWS" ] ; do
     WINDOWS=`xdotool search --name http`
     sleep 2
 done
+WINDOWS=`xdotool search --name http`
 X=0
 Y=0
 sleep 10
 for WINDOW in $WINDOWS ; do
-    xdotool windowsize $WINDOW $WINWIDTH $WINHEIGHT
+    xdotool windowsize $WINDOW $WINWIDTH `expr $WINHEIGHT - $TITLEHEIGHT`
     sleep 2
     xdotool windowmove $WINDOW $X $Y
     sleep 2
