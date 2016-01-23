@@ -10,39 +10,26 @@ if [ -f /etc/redhat-release ] ; then
 fi
 
 echo "Checking software"
+PACKAGES="jack-audio-connection-kit vlc meterbridge xdotool ruby gcc make libxcb-devel xcb-util-devel xcb-util-wm-devel rubygems kmod-nvidia kernel-devel akmod-nvidia gcc-c++ vdpauinfo libva-vdpau-driver libva-utils xorg-x11-drv-nvidia-libs rubygem-eventmachine vlc-plugin-jack"
 # Make sure the prerequisite software is installed
 if [ -f /usr/bin/apt-get ] ; then
-    if ! dpkg -l jack-audio-connection-kit > /dev/null ; then
-        sudo apt-get install -y jack-audio-connection-kit
-    fi
-    if ! dpkg -l vlc > /dev/null ; then
-        sudo apt-get install -y vlc
-    fi
-    if ! dpkg -l meterbridge > /dev/null ; then
-        sudo apt-get install -y meterbridge
-    fi
-    if ! dpkg -l xdotool > /dev/null ; then
-        sudo apt-get install -y xdotool
-    fi
-    if ! dpkg -l ruby > /dev/null ; then
-        sudo apt-get install -y ruby
-    fi
+    for PACKAGE in $PACKAGES ; do
+        if ! dpkg -l $PACKAGE > /dev/null ; then
+            sudo apt-get install -y $PACKAGE
+        fi
+    done
 elif [ -f /usr/bin/dnf ] ; then
-    if [ -z "`rpm -qa jack-audio-connection-kit`" ] ; then
-        sudo dnf -y install jack-audio-connection-kit
-    fi
-    if [ -z "`rpm -qa vlc`" ] ; then
-        sudo dnf -y install vlc
-    fi
-    if [ -z "`rpm -qa meterbridge`" ] ; then
-        sudo dnf -y install meterbridge
-    fi
-    if [ -z "`rpm -qa xdotool`" ] ; then
-        sudo dnf -y install xdotool
-    fi
-    if [ -z "`rpm -qa ruby`" ] ; then
-        sudo dnf -y install ruby
-    fi
+    for PACKAGE in $PACKAGES ; do
+        if [ -z "`rpm -qa $PACKAGE`" ] ; then
+            sudo dnf -y install $PACKAGE
+        fi
+    done
+elif [ -f /usr/bin/yum ] ; then
+    for PACKAGE in $PACKAGES ; do
+        if [ -z "`rpm -qa $PACKAGE`" ] ; then
+            sudo yum -y install $PACKAGE
+        fi
+    done
 else
     echo "This OS not supported"
     exit 1
